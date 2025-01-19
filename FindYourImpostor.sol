@@ -6,19 +6,24 @@ contract FindTheImpostor {
     address Admin;
     uint256 Id;
     uint256 public totalPlayers;
-    uint256 public totalActivePlayers;
-    address[] public Winner;
+    
+    address[] public Winners;
     bool RegistrationOpen = true;
+    bool GameOn = true;
 
     struct S_Player {
         bool isAlive;
         bool isImpostor;
     }
 
-    uint256[] impostors;
     mapping (address => uint256) public m_PlayerId;
     mapping (uint256 => S_Player) public m_Players;
 
+    modifier pausable {
+        require(GameOn, "Game Over");
+        _;
+    }
+    
     // Constructor
     constructor() {
         Admin = msg.sender;
@@ -36,57 +41,51 @@ contract FindTheImpostor {
         // Event can be added here if needed
     }
 
-    // Assign 3 random alive players as impostors
-    function assignImpostors() public {
+    // Assign 1 random alive player as impostor
+    function assignImpostor(uint256 I1) public {
         
         require(msg.sender == Admin, "Only the admin can assign impostors.");
-        require(totalPlayers >= 3, "At least 3 players are required to assign impostors.");
+        require(totalPlayers >= 1, "At least 3 players are required to assign impostors.");
         RegistrationOpen = false;
 
-        while (impostors.length < 3) {
-            uint randomId = getRandomNumber(totalPlayers) + 1; // Generate a random player ID
-            if (m_Players[randomId].isAlive && !m_Players[randomId].isImpostor) {
-                m_Players[randomId].isImpostor = true;
-                impostors.push(randomId);
-            }
-        }
-        totalActivePlayers = totalPlayers;
+        m_Players[I1].isImpostor = true;
+        
     }
-
-    // Generate a pseudo-random number within a range [0, max)
-    function getRandomNumber(uint max) public view returns (uint) {
-        require(max > 0, "Max must be greater than 0");
-        uint random = uint(keccak256(abi.encodePacked(block.timestamp, block.difficulty, msg.sender)));
-        return random % max;
-    }
+    
 
     // Kill function accessible only by impostors
-    function kill() public {
+    function kill() public pausable{
         uint256 callerId = m_PlayerId[msg.sender];
         require(m_Players[callerId].isAlive, "Player should be alive.");
         require(m_Players[callerId].isImpostor, "Only impostors can use this function.");
-        require(totalPlayers > 3, "Game cannot continue if too few players are left.");
-
-        // Find a random non-impostor player to kill
-        uint randomId;
-         do {
-            randomId = getRandomNumber(totalPlayers) + 1; // Generate a random player ID
-        } while (!m_Players[randomId].isAlive || m_Players[randomId].isImpostor);
-
+        require(totalPlayers > 1, "Game cannot continue if too few players are left.");
 
         // Kill the player
-        m_Players[randomId].isAlive = false;
-        totalActivePlayers--; // Decrease total alive players
+        
+        bool _isImpostor;
+        while (!_isImpostor){
+            if(m_Players[totalPlayers].isImpostor) 
+                --totalPlayers;
+            m_Players[totalPlayers].isAlive = false;   
+            --totalPlayers; // Decrease total alive players
+            _isImpostor = true;     
+        }
 
         // Event can be added here if needed
     }
 
     // Check if a player is an impostor
-    function frameTheImpostor() public view returns (bool) {
+    function catchTheImpostor(uint256 _impostorId) public pausable returns (bool) {
         uint256 callerId = m_PlayerId[msg.sender];
         require(m_Players[callerId].isAlive , "Player should be alive.");
 
-        return m_Players[callerId].isImpostor;
+        if(m_Players[_impostorId].isImpostor == true) {
+            Winners.push(msg.sender);
+            GameOn = false;
+        } 
+        else revert("Guess Again");
+        
+        return true;
     }
 
     // Check a player's status
@@ -102,8 +101,4 @@ contract FindTheImpostor {
         }
     }
 
-    function retrieveImpostors() public view returns (uint256[] memory ){
-        require(msg.sender == Admin, "only the admin can call");
-        return impostors;
-    }
 }
